@@ -1,0 +1,21 @@
+{
+  "images" : [
+    {
+      "filename" : "0e3866c3be7dacea85ade553b5eac877--fun-art-jpg.jpg",
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
+      "idiom" : "universal",
+      "scale" : "2x"
+    },
+    {
+      "idiom" : "universal",
+      "scale" : "3x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

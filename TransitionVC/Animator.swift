@@ -19,11 +19,12 @@ class Animator: UIPercentDrivenInteractiveTransition, UIViewControllerAnimatedTr
     let animationDuration = 1.5
     var operation: UINavigationController.Operation = .push
     weak var storedContext: UIViewControllerContextTransitioning?
+    var animator: UIViewPropertyAnimator?
     
  
     
    
-    
+    // MARK: - Replicator
     func setupReplicator(_ view: UIView) {
         let replicator = CAReplicatorLayer()
         let line = CAShapeLayer()
@@ -103,7 +104,7 @@ class Animator: UIPercentDrivenInteractiveTransition, UIViewControllerAnimatedTr
             view.layer.mask = nil
         }
     }
-    
+    // MARK: - Transition
     func transitionDuration(using transitionContext: UIViewControllerContextTransitioning?) -> TimeInterval {
         return animationDuration
     }
@@ -114,22 +115,123 @@ class Animator: UIPercentDrivenInteractiveTransition, UIViewControllerAnimatedTr
      
     
 
-        if operation == .push,
-           let toVC = transitionContext.viewController(forKey: .to) as? RedViewController {
+        if operation == .push {
+            if let toVC = transitionContext.viewController(forKey: .to) as? RedViewController {
             
             transitionContext.containerView.addSubview(toVC.view)
             setupReplicator(toVC.view)
-         
+            } else {
+                transitionAnimationPresent(using: transitionContext).startAnimation()
+            }
+            
       
-        } else if operation == .pop,
-                  let fromVC = transitionContext.viewController(forKey: .from) as? RedViewController,
-                  let toVC = transitionContext.viewController(forKey: .to) as? ViewController {
-            transitionContext.containerView.insertSubview(toVC.view, belowSubview: fromVC.view)
-            setupHeartReplicator(fromVC.view)
-        
+        } else if operation == .pop {
+            if let fromVC = transitionContext.viewController(forKey: .from) as? RedViewController,
+               let toVC = transitionContext.viewController(forKey: .to) as? ViewController {
+                transitionContext.containerView.insertSubview(toVC.view, belowSubview: fromVC.view)
+                setupHeartReplicator(fromVC.view)
+            } else {
+                transitionAnimationDismiss(using: transitionContext).startAnimation()
+            }
         }
     }
+    // MARK: - Present
+    func transitionAnimationPresent(using transitionContext: UIViewControllerContextTransitioning) -> UIViewImplicitlyAnimating {
+        let duration = 0.7
+        let container = transitionContext.containerView
+        
+        guard let toView = transitionContext.view(forKey: .to) else { return UIViewPropertyAnimator() }
+       
+        let animator = UIViewPropertyAnimator(duration: duration, curve: .easeOut)
+        var top = UIView()
+        var bottom = UIView()
+        
+        if let topSnap = toView.resizableSnapshotView(from: CGRect(x: 0, y: 0, width: toView.frame.width, height: toView.frame.midY), afterScreenUpdates: true, withCapInsets: .zero) {
+
+            topSnap.frame = CGRect(x: 0, y: -toView.frame.height / 2, width: toView.frame.width, height: toView.frame.height / 2)
+            top = topSnap
+        }
+        if let bottomSnap = toView.resizableSnapshotView(from: CGRect(x: 0, y: toView.frame.midY, width: toView.frame.width, height: toView.frame.midY), afterScreenUpdates: true, withCapInsets: .zero) {
+            bottomSnap.frame = CGRect(x: 0, y: toView.frame.height, width: toView.frame.width, height: toView.frame.height / 2)
+            bottom = bottomSnap
+        }
+        container.addSubview(top)
+        container.addSubview(bottom)
+        
+        animator.addAnimations {
+            top.transform = CGAffineTransform(translationX: 0.0, y: toView.frame.midY)
+            bottom.transform = CGAffineTransform(translationX: 0.0, y: -toView.frame.midY)
+        }
+        animator.addCompletion { position in
+          switch position {
+          case .end:
+              container.addSubview(toView)
+              top.removeFromSuperview()
+              bottom.removeFromSuperview()
+            transitionContext.completeTransition(!transitionContext.transitionWasCancelled)
+          default:
+            transitionContext.completeTransition(false)
+          }
+        }
+        self.animator = animator
+        animator.addCompletion { [unowned self] _ in
+            self.animator = nil
+        }
+        animator.isUserInteractionEnabled = true
+        return animator
+    }
+    // MARK: - Dismiss
+    func transitionAnimationDismiss(using transitionContext: UIViewControllerContextTransitioning) -> UIViewImplicitlyAnimating {
+        let duration = 0.7
+        let container = transitionContext.containerView
+
+        guard let fromView = transitionContext.view(forKey: .from), let toView = transitionContext.view(forKey: .to) else { return UIViewPropertyAnimator() }
+        
+        let animator = UIViewPropertyAnimator(duration: duration, curve: .easeIn)
+        var leftView = UIView()
+        var rightView = UIView()
+        
+        if let topSnap = fromView.resizableSnapshotView(from: CGRect(x: 0, y: 0, width: fromView.frame.width / 2, height: fromView.frame.height), afterScreenUpdates: true, withCapInsets: .zero) {
+
+            topSnap.frame = CGRect(x: 0, y: 0, width: fromView.frame.width / 2, height: fromView.frame.height)
+            leftView = topSnap
+        }
+        if let bottomSnap = fromView.resizableSnapshotView(from: CGRect(x: fromView.frame.midX, y: 0, width: fromView.frame.width / 2, height: fromView.frame.height), afterScreenUpdates: true, withCapInsets: .zero) {
+            bottomSnap.frame = CGRect(x: fromView.frame.midX, y: 0, width: fromView.frame.width / 2, height: fromView.frame.height)
+            rightView = bottomSnap
+        }
+
+        container.addSubview(leftView)
+        container.addSubview(rightView)
+        container.addSubview(toView)
+        container.insertSubview(leftView, aboveSubview: toView)
+        container.insertSubview(rightView, aboveSubview: toView)
+        
+        animator.addAnimations {
+            leftView.transform = CGAffineTransform(translationX: -fromView.frame.width, y: 0.0)
+            rightView.transform = CGAffineTransform(translationX: fromView.frame.width, y: 0.0)
+        }
+
+        animator.addCompletion { position in
+          switch position {
+          case .end:
+              fromView.removeFromSuperview()
+              leftView.removeFromSuperview()
+              rightView.removeFromSuperview()
+              
+            transitionContext.completeTransition(!transitionContext.transitionWasCancelled)
+          default:
+            transitionContext.completeTransition(false)
+          }
+        }
+        self.animator = animator
+        animator.addCompletion { [unowned self] _ in
+            self.animator = nil
+        }
+        return animator
+    }
 }
+// MARK: - CAAnimationDelegate
 extension Animator: CAAnimationDelegate {
     func animationDidStop(_ anim: CAAnimation, finished flag: Bool) {
         if let context = storedContext {
